@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from graph_builder import GraphBuilder
-from data_fetcher import CzechRegistryFetcher, ISIRFetcher, InternationalRegistryFetcher
+from .graph_builder import GraphBuilder
+from .data_fetcher import CzechRegistryFetcher, ISIRFetcher, InternationalRegistryFetcher
 import json
 
 app = Flask(__name__)

@@ -4,7 +4,7 @@ services:
     name: prepify-graph-api
     runtime: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -w 4 -b 0.0.0.0:$PORT backend.app:app"
+    startCommand: "gunicorn -w 4 -b 0.0.0.0:$PORT wsgi:app"
     envVars:
       - key: PYTHON_VERSION
         value: 3.14.3
