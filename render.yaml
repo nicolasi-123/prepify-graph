@@ -1,0 +1,25 @@
+services:
+  # Backend API
+  - type: web
+    name: prepify-graph-api
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn -w 4 -b 0.0.0.0:$PORT backend.app:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.3
+    
+  # Frontend
+  - type: web
+    name: prepify-graph-frontend
+    runtime: static
+    buildCommand: "cd frontend && npm install && npm run build"
+    staticPublishPath: frontend/build
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://prepify-graph-api.onrender.com
+```
