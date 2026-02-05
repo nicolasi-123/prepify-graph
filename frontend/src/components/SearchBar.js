@@ -14,6 +14,8 @@ function SearchBar({ onPathFound }) {
   const [showTargetResults, setShowTargetResults] = useState(false);
   const [maxPathLength, setMaxPathLength] = useState(5);
   const [topK, setTopK] = useState(3);
+  const [excludeInsolvent, setExcludeInsolvent] = useState(false);
+  const [excludeForeign, setExcludeForeign] = useState(false);
 
   const searchEntities = async (query, setResults) => {
     if (query.length < 2) {
@@ -58,7 +60,7 @@ function SearchBar({ onPathFound }) {
     setShowTargetResults(false);
   };
 
-  const findPath = async () => {
+const findPath = async () => {
     if (!selectedSource || !selectedTarget) {
       alert('Please select both entities');
       return;
@@ -69,7 +71,9 @@ function SearchBar({ onPathFound }) {
       const response = await axios.post(`${config.API_BASE_URL}/api/top-paths`, {
         source: selectedSource.id,
         target: selectedTarget.id,
-        k: topK
+        k: topK,
+        exclude_insolvent: excludeInsolvent,
+        exclude_foreign: excludeForeign
       });
 
       // Filter paths by max length if set
@@ -159,7 +163,7 @@ function SearchBar({ onPathFound }) {
         </div>
       </div>
 
-      {/* Advanced Filters */}
+{/* Advanced Filters */}
       <div className="search-filters">
         <div className="filter-group">
           <label>Max path length:</label>
@@ -179,6 +183,28 @@ function SearchBar({ onPathFound }) {
             <option value={3}>Top 3 paths</option>
             <option value={5}>Top 5 paths</option>
           </select>
+        </div>
+
+        <div className="filter-group checkbox-filter">
+          <label>
+            <input 
+              type="checkbox" 
+              checked={excludeInsolvent}
+              onChange={(e) => setExcludeInsolvent(e.target.checked)}
+            />
+            <span>Exclude insolvent entities ⚠️</span>
+          </label>
+        </div>
+
+        <div className="filter-group checkbox-filter">
+          <label>
+            <input 
+              type="checkbox" 
+              checked={excludeForeign}
+              onChange={(e) => setExcludeForeign(e.target.checked)}
+            />
+            <span>Exclude foreign entities 🌍</span>
+          </label>
         </div>
       </div>
 

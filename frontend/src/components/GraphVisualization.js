@@ -26,8 +26,22 @@ function GraphVisualization({ graphData, onCyReady }) {
           selector: 'node',
           style: {
             'background-color': function(ele) {
-              if (ele.data('highlighted')) return '#f39c12';
-              return ele.data('in_path') ? '#e74c3c' : '#3498db';
+              const data = ele.data();
+              
+              // Highlighted state
+              if (data.highlighted) return '#f39c12';
+              
+              // Insolvent entities - red warning
+              if (data.insolvent) return '#c0392b';
+              
+              // Foreign entities - purple
+              if (data.country && data.country !== 'CZ') return '#9b59b6';
+              
+              // In path - red
+              if (data.in_path) return '#e74c3c';
+              
+              // Default - blue
+              return '#3498db';
             },
             'label': 'data(label)',
             'width': function(ele) {
@@ -43,9 +57,17 @@ function GraphVisualization({ graphData, onCyReady }) {
             'text-outline-width': 2,
             'font-size': '12px',
             'border-width': function(ele) {
-              return ele.data('in_path') ? 4 : 0;
+              const data = ele.data();
+              if (data.insolvent) return 4;
+              if (data.in_path) return 4;
+              return 0;
             },
-            'border-color': '#c0392b',
+            'border-color': function(ele) {
+              return ele.data('insolvent') ? '#e74c3c' : '#c0392b';
+            },
+            'border-style': function(ele) {
+              return ele.data('insolvent') ? 'double' : 'solid';
+            },
             'transition-property': 'background-color, border-width',
             'transition-duration': '0.3s'
           }
@@ -110,6 +132,22 @@ function GraphVisualization({ graphData, onCyReady }) {
       let content = `<strong>${nodeData.label}</strong><br/>`;
       content += `Type: ${nodeData.type}<br/>`;
       content += `ID: ${node.id()}<br/>`;
+      
+      // Add country info
+      if (nodeData.country) {
+        const countryFlags = {
+          'CZ': '🇨🇿 Czech Republic',
+          'CY': '🇨🇾 Cyprus',
+          'NL': '🇳🇱 Netherlands'
+        };
+        content += `Country: ${countryFlags[nodeData.country] || nodeData.country}<br/>`;
+      }
+      
+      // Add insolvency warning
+      if (nodeData.insolvent) {
+        content += `<span style="color: #e74c3c; font-weight: bold;">⚠️ INSOLVENT</span><br/>`;
+      }
+      
       content += `Connections: ${node.degree()}`;
       
       setTooltip({
@@ -161,26 +199,41 @@ function GraphVisualization({ graphData, onCyReady }) {
 
     return () => {
       if (cyRef.current) {
-        cyRef.current.destroy();
+        try {
+          cyRef.current.removeAllListeners();
+          cyRef.current.destroy();
+          cyRef.current = null;
+        } catch (e) {
+          console.log('Cleanup error (safe to ignore):', e);
+        }
       }
     };
   }, [graphData, onCyReady]);
 
   const handleZoomIn = () => {
     if (cyRef.current) {
-      cyRef.current.zoom(cyRef.current.zoom() * 1.2);
+      const currentZoom = cyRef.current.zoom();
+      cyRef.current.zoom({
+        level: currentZoom * 1.2,
+        renderedPosition: { x: cyRef.current.width() / 2, y: cyRef.current.height() / 2 }
+      });
     }
   };
 
   const handleZoomOut = () => {
     if (cyRef.current) {
-      cyRef.current.zoom(cyRef.current.zoom() * 0.8);
+      const currentZoom = cyRef.current.zoom();
+      cyRef.current.zoom({
+        level: currentZoom * 0.8,
+        renderedPosition: { x: cyRef.current.width() / 2, y: cyRef.current.height() / 2 }
+      });
     }
   };
 
   const handleResetView = () => {
     if (cyRef.current) {
-      cyRef.current.fit();
+      cyRef.current.fit(50); // Fit with padding
+      cyRef.current.center(); // Center the graph
       // Clear highlights
       cyRef.current.nodes().forEach(n => n.data('highlighted', false));
       cyRef.current.edges().forEach(e => e.data('highlighted', false));
@@ -239,6 +292,14 @@ function GraphVisualization({ graphData, onCyReady }) {
         <div className="legend-item">
           <div className="legend-node person"></div>
           <span>Person (circle)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-node insolvent"></div>
+          <span>⚠️ Insolvent (dark red)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-node foreign"></div>
+          <span>🌍 Foreign (purple)</span>
         </div>
         <div className="legend-item">
           <div className="legend-edge path"></div>

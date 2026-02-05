@@ -165,7 +165,9 @@ def find_top_paths():
     
     source_id = data.get('source')
     target_id = data.get('target')
-    k = data.get('k', 3)  # Default to top 3 paths
+    k = data.get('k', 3)
+    exclude_insolvent = data.get('exclude_insolvent', False)
+    exclude_foreign = data.get('exclude_foreign', False)
     
     if not source_id or not target_id:
         return jsonify({"error": "Both 'source' and 'target' are required"}), 400
@@ -179,9 +181,37 @@ def find_top_paths():
             "message": f"No paths found between {source_id} and {target_id}"
         })
     
+    # Filter paths based on criteria
+    filtered_paths = []
+    for path in paths:
+        path_valid = True
+        
+        # Check each node in path
+        for node_id in path:
+            node_data = graph_builder.graph.nodes[node_id]
+            
+            # Skip insolvent entities if filter is on
+            if exclude_insolvent and node_data.get('insolvent', False):
+                path_valid = False
+                break
+            
+            # Skip foreign entities if filter is on
+            if exclude_foreign and node_data.get('country', 'CZ') != 'CZ':
+                path_valid = False
+                break
+        
+        if path_valid:
+            filtered_paths.append(path)
+    
+    if not filtered_paths:
+        return jsonify({
+            "found": False,
+            "message": "No paths found matching your filter criteria"
+        })
+    
     # Get details for each path
     paths_with_details = []
-    for path in paths:
+    for path in filtered_paths:
         paths_with_details.append({
             "path": path,
             "length": len(path) - 1,
@@ -190,14 +220,21 @@ def find_top_paths():
     
     # Export subgraph with all paths
     all_nodes = set()
-    for path in paths:
+    for path in filtered_paths:
         all_nodes.update(path)
     
     subgraph = graph_builder.export_subgraph(list(all_nodes), depth=0)
     
+    # Add insolvent and country info to subgraph nodes
+    for node in subgraph['nodes']:
+        node_id = node['data']['id']
+        node_data = graph_builder.graph.nodes[node_id]
+        node['data']['insolvent'] = node_data.get('insolvent', False)
+        node['data']['country'] = node_data.get('country', 'CZ')
+    
     return jsonify({
         "found": True,
-        "count": len(paths),
+        "count": len(filtered_paths),
         "paths": paths_with_details,
         "subgraph": subgraph
     })

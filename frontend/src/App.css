@@ -610,3 +610,55 @@
     gap: 10px;
   }
 }
+/* Checkbox Filters */
+.checkbox-filter {
+  display: flex;
+  align-items: center;
+}
+
+.checkbox-filter label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.checkbox-filter label:hover {
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.checkbox-filter input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.checkbox-filter span {
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+/* Legend nodes for new types */
+.legend-node.insolvent {
+  background: #c0392b;
+  border: 3px double #e74c3c;
+}
+
+.legend-node.foreign {
+  background: #9b59b6;
+}
+
+/* Update search-filters grid for 4 items */
+.search-filters {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 768px) {
+  .search-filters {
+    grid-template-columns: 1fr;
+  }
+}

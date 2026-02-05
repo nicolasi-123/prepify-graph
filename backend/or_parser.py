@@ -81,30 +81,42 @@ class ORJusticeParser:
         
         # Sample realistic Czech companies with real IČO
         sample_data = [
-            {"ico": "45274649", "name": "Avast Software s.r.o.", "city": "Praha"},
-            {"ico": "00025593", "name": "Československá obchodní banka, a. s.", "city": "Praha"},
-            {"ico": "27116158", "name": "Mall Group a.s.", "city": "Praha"},
-            {"ico": "63998505", "name": "Alza.cz a.s.", "city": "Praha"},
-            {"ico": "26168685", "name": "Rohlík.cz s.r.o.", "city": "Praha"},
-            {"ico": "24287903", "name": "O2 Czech Republic a.s.", "city": "Praha"},
-            {"ico": "60193336", "name": "Pilsner Urquell a.s.", "city": "Plzeň"},
-            {"ico": "45534306", "name": "Škoda Auto a.s.", "city": "Mladá Boleslav"},
-            {"ico": "00001834", "name": "Česká spořitelna, a.s.", "city": "Praha"},
-            {"ico": "25612093", "name": "Kofola ČeskoSlovensko a.s.", "city": "Ostrava"},
-            {"ico": "RC001", "name": "Jan Novák", "city": "Praha"},
-            {"ico": "RC002", "name": "Petr Svoboda", "city": "Brno"},
-            {"ico": "RC003", "name": "Marie Nováková", "city": "Praha"},
+            {"ico": "45274649", "name": "Avast Software s.r.o.", "city": "Praha", "insolvent": False, "country": "CZ"},
+            {"ico": "00025593", "name": "Československá obchodní banka, a. s.", "city": "Praha", "insolvent": False, "country": "CZ"},
+            {"ico": "27116158", "name": "Mall Group a.s.", "city": "Praha", "insolvent": False, "country": "CZ"},
+            {"ico": "63998505", "name": "Alza.cz a.s.", "city": "Praha", "insolvent": False, "country": "CZ"},
+            {"ico": "26168685", "name": "Rohlík.cz s.r.o.", "city": "Praha", "insolvent": False, "country": "CZ"},
+            {"ico": "24287903", "name": "O2 Czech Republic a.s.", "city": "Praha", "insolvent": False, "country": "CZ"},
+            {"ico": "60193336", "name": "Pilsner Urquell a.s.", "city": "Plzeň", "insolvent": False, "country": "CZ"},
+            {"ico": "45534306", "name": "Škoda Auto a.s.", "city": "Mladá Boleslav", "insolvent": False, "country": "CZ"},
+            {"ico": "00001834", "name": "Česká spořitelna, a.s.", "city": "Praha", "insolvent": False, "country": "CZ"},
+            {"ico": "25612093", "name": "Kofola ČeskoSlovensko a.s.", "city": "Ostrava", "insolvent": False, "country": "CZ"},
+            # Insolventní firmy (příklady)
+            {"ico": "12345678", "name": "Bankrot Trading s.r.o.", "city": "Praha", "insolvent": True, "country": "CZ"},
+            {"ico": "87654321", "name": "Dlužník Investments a.s.", "city": "Brno", "insolvent": True, "country": "CZ"},
+            # Zahraniční entity (Cyprus, Netherlands)
+            {"ico": "CY001", "name": "Cyprus Holdings Ltd.", "city": "Nicosia", "insolvent": False, "country": "CY"},
+            {"ico": "CY002", "name": "Offshore Investments Ltd.", "city": "Limassol", "insolvent": False, "country": "CY"},
+            {"ico": "NL001", "name": "Amsterdam Ventures B.V.", "city": "Amsterdam", "insolvent": False, "country": "NL"},
+            {"ico": "NL002", "name": "Rotterdam Holdings N.V.", "city": "Rotterdam", "insolvent": False, "country": "NL"},
+            # Osoby
+            {"ico": "RC001", "name": "Jan Novák", "city": "Praha", "country": "CZ"},
+            {"ico": "RC002", "name": "Petr Svoboda", "city": "Brno", "country": "CZ"},
+            {"ico": "RC003", "name": "Marie Nováková", "city": "Praha", "country": "CZ"},
         ]
         
         for company in sample_data[:min(len(sample_data), max_companies)]:
+            entity_type = 'person' if company['ico'].startswith('RC') else 'company'
             companies.append({
                 'id': company['ico'],
                 'name': company['name'],
-                'type': 'person' if company['ico'].startswith('RC') else 'company',
-                'city': company.get('city', '')
+                'type': entity_type,
+                'city': company.get('city', ''),
+                'insolvent': company.get('insolvent', False),
+                'country': company.get('country', 'CZ')
             })
         
-        # Add sample relationships
+        # Add sample relationships including insolvent and offshore entities
         relationships = [
             {'source': 'RC001', 'target': '45274649', 'type': 'jednatel'},
             {'source': '45274649', 'target': '27116158', 'type': 'společník'},
@@ -113,6 +125,14 @@ class ORJusticeParser:
             {'source': 'RC001', 'target': '00001834', 'type': 'akcionář'},
             {'source': '00001834', 'target': '00025593', 'type': 'dceřiná společnost'},
             {'source': 'RC003', 'target': '24287903', 'type': 'jednatelka'},
+            # Insolventní firmy v řetězci
+            {'source': '12345678', 'target': 'RC001', 'type': 'vlastník'},
+            {'source': '87654321', 'target': '27116158', 'type': 'dodavatel'},
+            # Offshore connections
+            {'source': 'CY001', 'target': '45274649', 'type': 'akcionář'},
+            {'source': 'RC002', 'target': 'CY002', 'type': 'beneficial owner'},
+            {'source': 'NL001', 'target': '00001834', 'type': 'parent company'},
+            {'source': 'NL002', 'target': 'CY001', 'type': 'subsidiary'},
         ]
         
         print(f"Created {len(companies)} sample companies with {len(relationships)} relationships")
