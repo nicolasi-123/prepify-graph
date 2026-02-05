@@ -12,6 +12,8 @@ function SearchBar({ onPathFound }) {
   const [loading, setLoading] = useState(false);
   const [showSourceResults, setShowSourceResults] = useState(false);
   const [showTargetResults, setShowTargetResults] = useState(false);
+  const [maxPathLength, setMaxPathLength] = useState(5);
+  const [topK, setTopK] = useState(3);
 
   const searchEntities = async (query, setResults) => {
     if (query.length < 2) {
@@ -46,19 +48,19 @@ function SearchBar({ onPathFound }) {
 
   const selectSource = (entity) => {
     setSelectedSource(entity);
-    setSourceQuery(entity.name);
+    setSourceQuery(`${entity.name} (${entity.id})`);
     setShowSourceResults(false);
   };
 
   const selectTarget = (entity) => {
     setSelectedTarget(entity);
-    setTargetQuery(entity.name);
+    setTargetQuery(`${entity.name} (${entity.id})`);
     setShowTargetResults(false);
   };
 
   const findPath = async () => {
     if (!selectedSource || !selectedTarget) {
-      alert('Vyberte prosím obě entity');
+      alert('Please select both entities');
       return;
     }
 
@@ -67,31 +69,55 @@ function SearchBar({ onPathFound }) {
       const response = await axios.post(`${config.API_BASE_URL}/api/top-paths`, {
         source: selectedSource.id,
         target: selectedTarget.id,
-        k: 3
+        k: topK
       });
+
+      // Filter paths by max length if set
+      if (response.data.paths) {
+        response.data.paths = response.data.paths.filter(
+          path => path.length <= maxPathLength
+        );
+        response.data.count = response.data.paths.length;
+      }
 
       onPathFound(response.data);
     } catch (error) {
       console.error('Error finding path:', error);
-      alert('Chyba při hledání cesty');
+      alert('Error finding path');
     } finally {
       setLoading(false);
     }
   };
 
+  const renderEntityResult = (entity) => {
+    // Show entity with ID and type for disambiguation
+    return (
+      <div className="result-item-content">
+        <div className="result-main">
+          <strong>{entity.name}</strong>
+          <span className="entity-id">ID: {entity.id}</span>
+        </div>
+        <span className={`entity-type ${entity.type}`}>
+          {entity.type === 'company' ? '🏢 Company' : '👤 Person'}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <div className="search-container">
-      <h1>Prepify Graph - Vizualizace vztahu</h1>
-      <p className="subtitle">Najdete nejkratsi cestu mezi firmami a osobami</p>
+      <h1>Prepify Graph - Relationship Visualization</h1>
+      <p className="subtitle">Find the shortest path between companies and people</p>
+
       <div className="search-boxes">
         <div className="search-box">
-          <label>Z (osoba/firma):</label>
+          <label>From (person/company):</label>
           <input
             type="text"
             value={sourceQuery}
             onChange={handleSourceChange}
             onFocus={() => sourceQuery && setShowSourceResults(true)}
-            placeholder="Začněte psát jméno..."
+            placeholder="Start typing name or ID..."
           />
           {showSourceResults && sourceResults.length > 0 && (
             <div className="results-dropdown">
@@ -101,8 +127,7 @@ function SearchBar({ onPathFound }) {
                   className="result-item"
                   onClick={() => selectSource(entity)}
                 >
-                  <strong>{entity.name}</strong>
-                  <span className="entity-type">{entity.type}</span>
+                  {renderEntityResult(entity)}
                 </div>
               ))}
             </div>
@@ -110,13 +135,13 @@ function SearchBar({ onPathFound }) {
         </div>
 
         <div className="search-box">
-          <label>Do (osoba/firma):</label>
+          <label>To (person/company):</label>
           <input
             type="text"
             value={targetQuery}
             onChange={handleTargetChange}
             onFocus={() => targetQuery && setShowTargetResults(true)}
-            placeholder="Začněte psát jméno..."
+            placeholder="Start typing name or ID..."
           />
           {showTargetResults && targetResults.length > 0 && (
             <div className="results-dropdown">
@@ -126,12 +151,34 @@ function SearchBar({ onPathFound }) {
                   className="result-item"
                   onClick={() => selectTarget(entity)}
                 >
-                  <strong>{entity.name}</strong>
-                  <span className="entity-type">{entity.type}</span>
+                  {renderEntityResult(entity)}
                 </div>
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Advanced Filters */}
+      <div className="search-filters">
+        <div className="filter-group">
+          <label>Max path length:</label>
+          <select value={maxPathLength} onChange={(e) => setMaxPathLength(Number(e.target.value))}>
+            <option value={3}>3 steps</option>
+            <option value={4}>4 steps</option>
+            <option value={5}>5 steps</option>
+            <option value={10}>10 steps</option>
+            <option value={999}>No limit</option>
+          </select>
+        </div>
+
+        <div className="filter-group">
+          <label>Number of paths:</label>
+          <select value={topK} onChange={(e) => setTopK(Number(e.target.value))}>
+            <option value={1}>1 path</option>
+            <option value={3}>Top 3 paths</option>
+            <option value={5}>Top 5 paths</option>
+          </select>
         </div>
       </div>
 
@@ -140,8 +187,28 @@ function SearchBar({ onPathFound }) {
         disabled={!selectedSource || !selectedTarget || loading}
         className="find-path-btn"
       >
-        {loading ? 'Hledám...' : 'Najít cestu'}
+        {loading ? 'Searching...' : 'Find Path'}
       </button>
+
+      {/* Selected entities display */}
+      {(selectedSource || selectedTarget) && (
+        <div className="selected-entities">
+          {selectedSource && (
+            <div className="selected-entity">
+              <span className="label">From:</span>
+              <span className="value">{selectedSource.name}</span>
+              <span className="id">({selectedSource.id})</span>
+            </div>
+          )}
+          {selectedTarget && (
+            <div className="selected-entity">
+              <span className="label">To:</span>
+              <span className="value">{selectedTarget.name}</span>
+              <span className="id">({selectedTarget.id})</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

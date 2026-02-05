@@ -1,18 +1,18 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import cytoscape from 'cytoscape';
 import cola from 'cytoscape-cola';
 
-// Register layout
 cytoscape.use(cola);
 
-function GraphVisualization({ graphData }) {
+function GraphVisualization({ graphData, onCyReady }) {
   const containerRef = useRef(null);
   const cyRef = useRef(null);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: '' });
 
   useEffect(() => {
     if (!graphData || !containerRef.current) return;
 
-    // Initialize Cytoscape
     const cy = cytoscape({
       container: containerRef.current,
       
@@ -26,6 +26,7 @@ function GraphVisualization({ graphData }) {
           selector: 'node',
           style: {
             'background-color': function(ele) {
+              if (ele.data('highlighted')) return '#f39c12';
               return ele.data('in_path') ? '#e74c3c' : '#3498db';
             },
             'label': 'data(label)',
@@ -44,7 +45,9 @@ function GraphVisualization({ graphData }) {
             'border-width': function(ele) {
               return ele.data('in_path') ? 4 : 0;
             },
-            'border-color': '#c0392b'
+            'border-color': '#c0392b',
+            'transition-property': 'background-color, border-width',
+            'transition-duration': '0.3s'
           }
         },
         {
@@ -76,17 +79,9 @@ function GraphVisualization({ graphData }) {
             'label': 'data(type)',
             'font-size': '10px',
             'text-rotation': 'autorotate',
-            'text-margin-y': -10
-          }
-        },
-        {
-          selector: ':selected',
-          style: {
-            'background-color': '#f39c12',
-            'line-color': '#f39c12',
-            'target-arrow-color': '#f39c12',
-            'border-width': 3,
-            'border-color': '#e67e22'
+            'text-margin-y': -10,
+            'transition-property': 'line-color, width',
+            'transition-duration': '0.3s'
           }
         }
       ],
@@ -106,33 +101,98 @@ function GraphVisualization({ graphData }) {
       wheelSensitivity: 0.2
     });
 
-    // Add click handler for nodes
-    cy.on('tap', 'node', function(evt) {
+    // Tooltip handlers
+    cy.on('mouseover', 'node', function(evt) {
       const node = evt.target;
-      console.log('Clicked node:', node.data());
+      const nodeData = node.data();
+      const position = evt.renderedPosition;
       
-      // Highlight clicked node and neighbors
-      cy.elements().removeClass('highlighted');
-      node.addClass('highlighted');
-      node.neighborhood().addClass('highlighted');
+      let content = `<strong>${nodeData.label}</strong><br/>`;
+      content += `Type: ${nodeData.type}<br/>`;
+      content += `ID: ${node.id()}<br/>`;
+      content += `Connections: ${node.degree()}`;
+      
+      setTooltip({
+        visible: true,
+        x: position.x,
+        y: position.y,
+        content: content
+      });
     });
 
-    // Store reference
-    cyRef.current = cy;
+    cy.on('mouseout', 'node', function() {
+      setTooltip({ visible: false, x: 0, y: 0, content: '' });
+    });
 
-    // Cleanup
+    // Click handler for permanent highlighting
+    cy.on('tap', 'node', function(evt) {
+      const node = evt.target;
+      
+      // Toggle highlighting
+      const isHighlighted = node.data('highlighted');
+      
+      // Reset all highlights
+      cy.nodes().forEach(n => n.data('highlighted', false));
+      cy.edges().forEach(e => e.data('highlighted', false));
+      
+      if (!isHighlighted) {
+        // Highlight clicked node and neighbors
+        node.data('highlighted', true);
+        node.neighborhood().forEach(ele => {
+          ele.data('highlighted', true);
+        });
+        
+        setSelectedNode({
+          id: node.id(),
+          name: node.data('label'),
+          type: node.data('type')
+        });
+      } else {
+        setSelectedNode(null);
+      }
+    });
+
+    cyRef.current = cy;
+    
+    // Pass cy reference to parent
+    if (onCyReady) {
+      onCyReady(cy);
+    }
+
     return () => {
       if (cyRef.current) {
         cyRef.current.destroy();
       }
     };
-  }, [graphData]);
+  }, [graphData, onCyReady]);
+
+  const handleZoomIn = () => {
+    if (cyRef.current) {
+      cyRef.current.zoom(cyRef.current.zoom() * 1.2);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (cyRef.current) {
+      cyRef.current.zoom(cyRef.current.zoom() * 0.8);
+    }
+  };
+
+  const handleResetView = () => {
+    if (cyRef.current) {
+      cyRef.current.fit();
+      // Clear highlights
+      cyRef.current.nodes().forEach(n => n.data('highlighted', false));
+      cyRef.current.edges().forEach(e => e.data('highlighted', false));
+      setSelectedNode(null);
+    }
+  };
 
   if (!graphData) {
     return (
       <div className="graph-container">
         <div className="no-data">
-          <p>Zadejte dvì entity a kliknìte na "Najít cestu"</p>
+          <p>Enter two entities and click "Find path"</p>
         </div>
       </div>
     );
@@ -140,23 +200,57 @@ function GraphVisualization({ graphData }) {
 
   return (
     <div className="graph-container">
-      <div ref={containerRef} style={{ width: '100%', height: '600px' }} />
+      <div ref={containerRef} style={{ width: '100%', height: '600px', position: 'relative' }} />
+      
+      {/* Zoom Controls */}
+      <div className="zoom-controls">
+        <button onClick={handleZoomIn} title="Zoom In">âž•</button>
+        <button onClick={handleZoomOut} title="Zoom Out">âž–</button>
+        <button onClick={handleResetView} title="Reset View">ðŸ”„</button>
+      </div>
+
+      {/* Tooltip */}
+      {tooltip.visible && (
+        <div 
+          className="graph-tooltip"
+          style={{
+            position: 'absolute',
+            left: tooltip.x + 10,
+            top: tooltip.y + 10,
+            pointerEvents: 'none'
+          }}
+          dangerouslySetInnerHTML={{ __html: tooltip.content }}
+        />
+      )}
+
+      {/* Selected Node Info */}
+      {selectedNode && (
+        <div className="selected-node-info">
+          <strong>Selected:</strong> {selectedNode.name} ({selectedNode.type})
+        </div>
+      )}
+
+      {/* Legend */}
       <div className="graph-legend">
         <div className="legend-item">
           <div className="legend-node company"></div>
-          <span>Firma (obdélník)</span>
+          <span>Company (rectangle)</span>
         </div>
         <div className="legend-item">
           <div className="legend-node person"></div>
-          <span>Osoba (kruh)</span>
+          <span>Person (circle)</span>
         </div>
         <div className="legend-item">
           <div className="legend-edge path"></div>
-          <span>Cesta (èervená)</span>
+          <span>Path (red)</span>
         </div>
         <div className="legend-item">
           <div className="legend-edge normal"></div>
-          <span>Ostatní vztahy (šedá)</span>
+          <span>Other (gray)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-node highlighted"></div>
+          <span>Highlighted (orange)</span>
         </div>
       </div>
     </div>

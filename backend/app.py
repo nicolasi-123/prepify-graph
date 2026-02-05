@@ -91,25 +91,38 @@ def home():
 
 @app.route('/api/search', methods=['GET'])
 def search_entities():
-    """Search for entities by name or ID"""
+    """Search for entities by name, ID, or city"""
     query = request.args.get('q', '').lower()
     
     if not query:
         return jsonify({"error": "Query parameter 'q' is required"}), 400
     
     results = []
+    seen_ids = set()
+    
     for node_id in graph_builder.graph.nodes():
         node_data = graph_builder.graph.nodes[node_id]
         name = node_data.get('name', '').lower()
+        city = node_data.get('city', '').lower()
         
-        if query in name or query in node_id.lower():
-            results.append({
-                'id': node_id,
-                'name': node_data.get('name', ''),
-                'type': node_data.get('type', '')
-            })
+        # Search by name, ID, or city
+        if query in name or query in node_id.lower() or query in city:
+            if node_id not in seen_ids:
+                results.append({
+                    'id': node_id,
+                    'name': node_data.get('name', ''),
+                    'type': node_data.get('type', ''),
+                    'city': node_data.get('city', '')
+                })
+                seen_ids.add(node_id)
     
-    return jsonify({"results": results})
+    # Sort results: exact matches first, then by name
+    results.sort(key=lambda x: (
+        not x['name'].lower().startswith(query),  # Exact matches first
+        x['name'].lower()
+    ))
+    
+    return jsonify({"results": results[:20]})  # Limit to 20 results
 
 @app.route('/api/shortest-path', methods=['POST'])
 def find_shortest_path():
