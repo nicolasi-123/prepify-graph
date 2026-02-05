@@ -18,36 +18,61 @@ intl_fetcher = InternationalRegistryFetcher()
 # Sample data for testing (will be replaced with real data)
 def load_sample_data():
     """Load sample Czech business registry data"""
+    print("=" * 50)
     print("Loading data into graph...")
+    print("=" * 50)
     
     # Try to load real data from OR first
     try:
-        from or_parser import or_parser
+        import or_parser as parser_module
+        print("✓ OR parser module imported successfully")
+        
         print("Attempting to fetch real data from OR justice.cz...")
-        real_data = or_parser.fetch_sample_data(max_companies=100)
+        real_data = parser_module.or_parser.fetch_sample_data(max_companies=100)
+        
+        print(f"Fetched {len(real_data.get('companies', []))} companies")
+        print(f"Fetched {len(real_data.get('relationships', []))} relationships")
         
         if real_data['companies']:
-            print(f"Loaded {len(real_data['companies'])} real companies from OR")
+            print(f"Loading {len(real_data['companies'])} companies into graph...")
             
             # Add companies to graph
-            for company in real_data['companies']:
+            for i, company in enumerate(real_data['companies']):
                 graph_builder.add_entity(company['id'], company)
+                if i < 5:  # Print first 5
+                    print(f"  Added: {company['name']} ({company['id']})")
             
             # Add relationships if any
-            for rel in real_data.get('relationships', []):
+            print(f"Loading {len(real_data.get('relationships', []))} relationships...")
+            for i, rel in enumerate(real_data.get('relationships', [])):
                 graph_builder.add_relationship(
                     rel['source'],
                     rel['target'],
                     rel['type']
                 )
+                if i < 5:  # Print first 5
+                    print(f"  Added: {rel['source']} --[{rel['type']}]--> {rel['target']}")
             
-            print("Real data loaded successfully!")
+            stats = graph_builder.get_graph_stats()
+            print("=" * 50)
+            print(f"✓ Real data loaded successfully!")
+            print(f"  Total nodes: {stats['total_nodes']}")
+            print(f"  Total edges: {stats['total_edges']}")
+            print("=" * 50)
             return
+            
+    except ImportError as e:
+        print(f"✗ Import error: {e}")
+        print("  or_parser module not found - using fallback data")
     except Exception as e:
-        print(f"Could not load real data: {e}")
-        print("Falling back to sample data...")
+        print(f"✗ Could not load real data: {e}")
+        print(f"  Error type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+        print("  Falling back to sample data...")
     
     # Fallback: Sample entities
+    print("Loading fallback sample data...")
     entities = [
         {"id": "00012345", "name": "ABC s.r.o.", "type": "company"},
         {"id": "00067891", "name": "XYZ a.s.", "type": "company"},
@@ -70,10 +95,9 @@ def load_sample_data():
     for source, target, rel_type in relationships:
         graph_builder.add_relationship(source, target, rel_type)
     
-    print("Sample data loaded")
+    print("Sample data loaded (fallback)")
 
-# Load sample data on startup
-load_sample_data()
+
 
 @app.route('/')
 def home():
@@ -100,21 +124,31 @@ def search_entities():
     results = []
     seen_ids = set()
     
+    print(f"Searching for: {query}")
+    print(f"Total nodes in graph: {graph_builder.graph.number_of_nodes()}")
+    
     for node_id in graph_builder.graph.nodes():
         node_data = graph_builder.graph.nodes[node_id]
-        name = node_data.get('name', '').lower()
-        city = node_data.get('city', '').lower()
+        name = str(node_data.get('name', '')).lower()
+        city = str(node_data.get('city', '')).lower()
+        node_id_lower = str(node_id).lower()
         
         # Search by name, ID, or city
-        if query in name or query in node_id.lower() or query in city:
+        if query in name or query in node_id_lower or query in city:
             if node_id not in seen_ids:
-                results.append({
+                entity_type = node_data.get('type', 'unknown')
+                
+                result = {
                     'id': node_id,
-                    'name': node_data.get('name', ''),
-                    'type': node_data.get('type', ''),
-                    'city': node_data.get('city', '')
-                })
+                    'name': node_data.get('name', 'Unknown'),
+                    'type': entity_type,
+                    'city': node_data.get('city', ''),
+                    'insolvent': node_data.get('insolvent', False),
+                    'country': node_data.get('country', 'CZ')
+                }
+                results.append(result)
                 seen_ids.add(node_id)
+                print(f"Found match: {result['name']} ({node_id})")
     
     # Sort results: exact matches first, then by name
     results.sort(key=lambda x: (
@@ -122,6 +156,7 @@ def search_entities():
         x['name'].lower()
     ))
     
+    print(f"Returning {len(results)} results")
     return jsonify({"results": results[:20]})  # Limit to 20 results
 
 @app.route('/api/shortest-path', methods=['POST'])
@@ -276,42 +311,22 @@ def get_entity_details(entity_id):
         'neighbor_count': len(neighbors)
     })
 
-@app.route('/api/reload-data', methods=['POST'])
-def reload_data():
-    """Reload data from OR justice.cz"""
-    try:
-        data = request.json or {}
-        max_companies = data.get('max_companies', 500)
-        
-        # Clear existing graph
-        graph_builder.graph.clear()
-        
-        # Fetch new data
-        real_data = or_parser.fetch_sample_data(max_companies=max_companies)
-        
-        # Add to graph
-        for company in real_data['companies']:
-            graph_builder.add_entity(company['id'], company)
-        
-        for rel in real_data.get('relationships', []):
-            graph_builder.add_relationship(
-                rel['source'],
-                rel['target'],
-                rel['type']
-            )
-        
-        stats = graph_builder.get_graph_stats()
-        
-        return jsonify({
-            "success": True,
-            "message": f"Loaded {len(real_data['companies'])} companies",
-            "stats": stats
-        })
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+# Load sample data on startup (only once)
+if graph_builder.graph.number_of_nodes() == 0:
+    load_sample_data()
+else:
+    print(f"Graph already loaded with {graph_builder.graph.number_of_nodes()} nodes")
+
+@app.route('/api/debug/reload', methods=['POST'])
+def debug_reload():
+    """Debug endpoint to reload data"""
+    graph_builder.graph.clear()
+    load_sample_data()
+    stats = graph_builder.get_graph_stats()
+    return jsonify({
+        "reloaded": True,
+        "stats": stats
+    })
 
 if __name__ == '__main__':
     import os
