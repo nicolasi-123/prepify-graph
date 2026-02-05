@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from .graph_builder import GraphBuilder
-from .data_fetcher import CzechRegistryFetcher, ISIRFetcher, InternationalRegistryFetcher
+from graph_builder import GraphBuilder
+from data_fetcher import CzechRegistryFetcher, ISIRFetcher, InternationalRegistryFetcher
+from or_parser import or_parser
 import json
 
 app = Flask(__name__)
@@ -17,7 +18,36 @@ intl_fetcher = InternationalRegistryFetcher()
 # Sample data for testing (will be replaced with real data)
 def load_sample_data():
     """Load sample Czech business registry data"""
-    # Sample entities
+    print("Loading data into graph...")
+    
+    # Try to load real data from OR first
+    try:
+        from or_parser import or_parser
+        print("Attempting to fetch real data from OR justice.cz...")
+        real_data = or_parser.fetch_sample_data(max_companies=100)
+        
+        if real_data['companies']:
+            print(f"Loaded {len(real_data['companies'])} real companies from OR")
+            
+            # Add companies to graph
+            for company in real_data['companies']:
+                graph_builder.add_entity(company['id'], company)
+            
+            # Add relationships if any
+            for rel in real_data.get('relationships', []):
+                graph_builder.add_relationship(
+                    rel['source'],
+                    rel['target'],
+                    rel['type']
+                )
+            
+            print("Real data loaded successfully!")
+            return
+    except Exception as e:
+        print(f"Could not load real data: {e}")
+        print("Falling back to sample data...")
+    
+    # Fallback: Sample entities
     entities = [
         {"id": "00012345", "name": "ABC s.r.o.", "type": "company"},
         {"id": "00067891", "name": "XYZ a.s.", "type": "company"},
@@ -26,21 +56,21 @@ def load_sample_data():
         {"id": "00054321", "name": "DEF s.r.o.", "type": "company"},
     ]
     
-    # Add entities to graph
     for entity in entities:
         graph_builder.add_entity(entity["id"], entity)
     
-    # Sample relationships
     relationships = [
-        ("RC123456", "00012345", "jednatel"),  # Jan Novák is director of ABC
-        ("00012345", "00067891", "společník"),  # ABC is partner in XYZ
-        ("RC789012", "00067891", "jednatel"),  # Petr Svoboda is director of XYZ
-        ("RC123456", "00054321", "společník"),  # Jan Novák is partner in DEF
-        ("00054321", "RC789012", "vlastník"),  # DEF owned by Petr Svoboda
+        ("RC123456", "00012345", "jednatel"),
+        ("00012345", "00067891", "společník"),
+        ("RC789012", "00067891", "jednatel"),
+        ("RC123456", "00054321", "společník"),
+        ("00054321", "RC789012", "vlastník"),
     ]
     
     for source, target, rel_type in relationships:
         graph_builder.add_relationship(source, target, rel_type)
+    
+    print("Sample data loaded")
 
 # Load sample data on startup
 load_sample_data()
@@ -195,6 +225,43 @@ def get_entity_details(entity_id):
         'neighbors': neighbor_details,
         'neighbor_count': len(neighbors)
     })
+
+@app.route('/api/reload-data', methods=['POST'])
+def reload_data():
+    """Reload data from OR justice.cz"""
+    try:
+        data = request.json or {}
+        max_companies = data.get('max_companies', 500)
+        
+        # Clear existing graph
+        graph_builder.graph.clear()
+        
+        # Fetch new data
+        real_data = or_parser.fetch_sample_data(max_companies=max_companies)
+        
+        # Add to graph
+        for company in real_data['companies']:
+            graph_builder.add_entity(company['id'], company)
+        
+        for rel in real_data.get('relationships', []):
+            graph_builder.add_relationship(
+                rel['source'],
+                rel['target'],
+                rel['type']
+            )
+        
+        stats = graph_builder.get_graph_stats()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Loaded {len(real_data['companies'])} companies",
+            "stats": stats
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 if __name__ == '__main__':
     import os
