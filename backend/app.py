@@ -25,7 +25,7 @@ def load_sample_data():
     # Try to load real data from OR first
     try:
         import or_parser as parser_module
-        print("✓ OR parser module imported successfully")
+        print("[OK] OR parser module imported successfully")
         
         print("Attempting to fetch real data from OR justice.cz...")
         real_data = parser_module.or_parser.fetch_sample_data(max_companies=100)
@@ -55,17 +55,17 @@ def load_sample_data():
             
             stats = graph_builder.get_graph_stats()
             print("=" * 50)
-            print(f"✓ Real data loaded successfully!")
+            print(f"[OK] Real data loaded successfully!")
             print(f"  Total nodes: {stats['total_nodes']}")
             print(f"  Total edges: {stats['total_edges']}")
             print("=" * 50)
             return
             
     except ImportError as e:
-        print(f"✗ Import error: {e}")
+        print(f"[FAIL] Import error: {e}")
         print("  or_parser module not found - using fallback data")
     except Exception as e:
-        print(f"✗ Could not load real data: {e}")
+        print(f"[FAIL] Could not load real data: {e}")
         print(f"  Error type: {type(e).__name__}")
         import traceback
         traceback.print_exc()
