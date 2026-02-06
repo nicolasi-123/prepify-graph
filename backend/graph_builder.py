@@ -6,7 +6,8 @@ class GraphBuilder:
     """Builds and queries the relationship graph"""
     
     def __init__(self):
-        self.graph = nx.Graph()
+    self.graph = nx.Graph()
+    print(f"[GraphBuilder] New instance created - ID: {id(self)}")
         
     def add_entity(self, entity_id: str, entity_data: Dict):
         """Add entity (company or person) to graph"""
@@ -120,3 +121,9 @@ class GraphBuilder:
             })
         
         return {'nodes': nodes, 'edges': edges}
+        def clear(self):
+    """Clear the graph"""
+    import traceback
+    print(f"[GraphBuilder] GRAPH CLEARED! Stack trace:")
+    traceback.print_stack()
+    self.graph.clear()
