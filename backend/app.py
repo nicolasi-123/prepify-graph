@@ -311,12 +311,6 @@ def get_entity_details(entity_id):
         'neighbor_count': len(neighbors)
     })
 
-# Load sample data on startup (only once)
-if graph_builder.graph.number_of_nodes() == 0:
-    load_sample_data()
-else:
-    print(f"Graph already loaded with {graph_builder.graph.number_of_nodes()} nodes")
-
 @app.route('/api/debug/reload', methods=['POST'])
 def debug_reload():
     """Debug endpoint to reload data"""
@@ -327,6 +321,12 @@ def debug_reload():
         "reloaded": True,
         "stats": stats
     })
+
+    # Load sample data on startup (only once)
+if graph_builder.graph.number_of_nodes() == 0:
+    load_sample_data()
+else:
+    print(f"Graph already loaded with {graph_builder.graph.number_of_nodes()} nodes")
 
 if __name__ == '__main__':
     import os
