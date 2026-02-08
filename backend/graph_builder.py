@@ -15,17 +15,24 @@ class GraphBuilder:
             entity_id,
             name=entity_data.get('name', ''),
             type=entity_data.get('type', 'unknown'),
+            city=entity_data.get('city', ''),
+            country=entity_data.get('country', 'CZ'),
+            insolvent=entity_data.get('insolvent', False),
             data=entity_data
         )
     
-    def add_relationship(self, entity1_id: str, entity2_id: str, 
+    def add_relationship(self, entity1_id: str, entity2_id: str,
                         relationship_type: str, metadata: Dict = None):
         """Add relationship between two entities"""
+        if metadata is None:
+            metadata = {}
+
         self.graph.add_edge(
             entity1_id,
             entity2_id,
             type=relationship_type,
-            metadata=metadata or {}
+            active=metadata.get('active', True),
+            metadata=metadata
         )
     
     def find_shortest_path(self, source_id: str, target_id: str) -> Optional[List[str]]:
@@ -50,6 +57,38 @@ class GraphBuilder:
         except nx.NodeNotFound as e:
             print(f"Node not found: {e}")
             return []
+
+    def find_multi_point_path(self, waypoints: List[str]) -> Optional[List[str]]:
+        """Find shortest path through multiple waypoints in order"""
+        if len(waypoints) < 2:
+            print("Need at least 2 waypoints")
+            return None
+
+        combined_path = []
+
+        # Find path between each consecutive pair of waypoints
+        for i in range(len(waypoints) - 1):
+            source = waypoints[i]
+            target = waypoints[i + 1]
+
+            try:
+                segment = nx.shortest_path(self.graph, source=source, target=target)
+
+                # Add segment to combined path, avoiding duplicates at connection points
+                if i == 0:
+                    combined_path.extend(segment)
+                else:
+                    # Skip first node of segment (it's the last node of previous segment)
+                    combined_path.extend(segment[1:])
+
+            except nx.NetworkXNoPath:
+                print(f"No path found between {source} and {target}")
+                return None
+            except nx.NodeNotFound as e:
+                print(f"Node not found: {e}")
+                return None
+
+        return combined_path
     
     def get_path_details(self, path: List[str]) -> List[Dict]:
         """Get detailed information about entities in a path"""
@@ -105,7 +144,10 @@ class GraphBuilder:
                     'id': node_id,
                     'label': node_data.get('name', node_id),
                     'type': node_data.get('type', 'unknown'),
-                    'in_path': node_id in path
+                    'in_path': node_id in path,
+                    'insolvent': node_data.get('insolvent', False),
+                    'country': node_data.get('country', 'CZ'),
+                    'city': node_data.get('city', '')
                 }
             })
         
@@ -116,6 +158,7 @@ class GraphBuilder:
                     'source': edge[0],
                     'target': edge[1],
                     'type': edge_data.get('type', 'unknown'),
+                    'active': edge_data.get('active', True),
                     'in_path': edge[0] in path and edge[1] in path
                 }
             })

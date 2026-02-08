@@ -15,21 +15,34 @@ cz_fetcher = CzechRegistryFetcher()
 isir_fetcher = ISIRFetcher()
 intl_fetcher = InternationalRegistryFetcher()
 
+# Configuration: Set to True to download real OR data, False for sample data
+USE_REAL_DATA = True  # Set via environment variable or change here
+
 # Sample data for testing (will be replaced with real data)
 def load_sample_data():
     """Load sample Czech business registry data"""
+    import os
+
+    # Check environment variable
+    use_real = os.environ.get('USE_REAL_DATA', str(USE_REAL_DATA)).lower() in ('true', '1', 'yes')
+
     print("=" * 50)
-    print("Loading data into graph...")
+    print(f"Loading data into graph... (USE_REAL_DATA={use_real})")
     print("=" * 50)
-    
+
     # Try to load real data from OR first
     try:
         import or_parser as parser_module
         print("[OK] OR parser module imported successfully")
-        
-        print("Attempting to fetch real data from OR justice.cz...")
-        real_data = parser_module.or_parser.fetch_sample_data(max_companies=100)
-        
+
+        if use_real:
+            print("[REAL DATA] Attempting to fetch REAL data from OR justice.cz...")
+            print("[WARNING] This may take several minutes on first run...")
+        else:
+            print("[SAMPLE DATA] Using sample data (set USE_REAL_DATA=True to use real data)")
+
+        real_data = parser_module.or_parser.fetch_sample_data(max_companies=100, use_real_data=use_real)
+
         print(f"Fetched {len(real_data.get('companies', []))} companies")
         print(f"Fetched {len(real_data.get('relationships', []))} relationships")
         
@@ -48,10 +61,12 @@ def load_sample_data():
                 graph_builder.add_relationship(
                     rel['source'],
                     rel['target'],
-                    rel['type']
+                    rel['type'],
+                    metadata={'active': rel.get('active', True)}
                 )
                 if i < 5:  # Print first 5
-                    print(f"  Added: {rel['source']} --[{rel['type']}]--> {rel['target']}")
+                    active_status = "active" if rel.get('active', True) else "inactive"
+                    print(f"  Added: {rel['source']} --[{rel['type']} ({active_status})]--> {rel['target']}")
             
             stats = graph_builder.get_graph_stats()
             print("=" * 50)
@@ -197,44 +212,53 @@ def find_shortest_path():
 def find_top_paths():
     """Find top K shortest paths between two entities"""
     data = request.json
-    
+
     source_id = data.get('source')
     target_id = data.get('target')
     k = data.get('k', 3)
     exclude_insolvent = data.get('exclude_insolvent', False)
     exclude_foreign = data.get('exclude_foreign', False)
-    
+    exclude_inactive = data.get('exclude_inactive', False)
+
     if not source_id or not target_id:
         return jsonify({"error": "Both 'source' and 'target' are required"}), 400
-    
+
     # Find top K paths
     paths = graph_builder.find_top_k_paths(source_id, target_id, k)
-    
+
     if not paths:
         return jsonify({
             "found": False,
             "message": f"No paths found between {source_id} and {target_id}"
         })
-    
+
     # Filter paths based on criteria
     filtered_paths = []
     for path in paths:
         path_valid = True
-        
+
         # Check each node in path
         for node_id in path:
             node_data = graph_builder.graph.nodes[node_id]
-            
+
             # Skip insolvent entities if filter is on
             if exclude_insolvent and node_data.get('insolvent', False):
                 path_valid = False
                 break
-            
+
             # Skip foreign entities if filter is on
             if exclude_foreign and node_data.get('country', 'CZ') != 'CZ':
                 path_valid = False
                 break
-        
+
+        # Check edges in path for inactive relationships
+        if path_valid and exclude_inactive:
+            for i in range(len(path) - 1):
+                edge_data = graph_builder.graph.edges[path[i], path[i + 1]]
+                if not edge_data.get('active', True):
+                    path_valid = False
+                    break
+
         if path_valid:
             filtered_paths.append(path)
     
@@ -274,11 +298,200 @@ def find_top_paths():
         "subgraph": subgraph
     })
 
+@app.route('/api/multi-path', methods=['POST'])
+def find_multi_point_path():
+    """Find path through multiple waypoints"""
+    data = request.json
+
+    waypoints = data.get('waypoints', [])
+    exclude_insolvent = data.get('exclude_insolvent', False)
+    exclude_foreign = data.get('exclude_foreign', False)
+    exclude_inactive = data.get('exclude_inactive', False)
+
+    if len(waypoints) < 2:
+        return jsonify({"error": "At least 2 waypoints are required"}), 400
+
+    # Find multi-point path
+    path = graph_builder.find_multi_point_path(waypoints)
+
+    if not path:
+        return jsonify({
+            "found": False,
+            "message": f"No path found through all waypoints"
+        })
+
+    # Apply filters to the path
+    path_valid = True
+
+    # Check each node in path
+    for node_id in path:
+        node_data = graph_builder.graph.nodes[node_id]
+
+        # Skip insolvent entities if filter is on
+        if exclude_insolvent and node_data.get('insolvent', False):
+            path_valid = False
+            break
+
+        # Skip foreign entities if filter is on
+        if exclude_foreign and node_data.get('country', 'CZ') != 'CZ':
+            path_valid = False
+            break
+
+    # Check edges in path for inactive relationships
+    if path_valid and exclude_inactive:
+        for i in range(len(path) - 1):
+            edge_data = graph_builder.graph.edges[path[i], path[i + 1]]
+            if not edge_data.get('active', True):
+                path_valid = False
+                break
+
+    if not path_valid:
+        return jsonify({
+            "found": False,
+            "message": "Path found but filtered out by your criteria"
+        })
+
+    # Get path details
+    path_details = graph_builder.get_path_details(path)
+
+    # Export subgraph for visualization
+    subgraph = graph_builder.export_subgraph(path, depth=1)
+
+    # Add insolvent and country info to subgraph nodes
+    for node in subgraph['nodes']:
+        node_id = node['data']['id']
+        node_data = graph_builder.graph.nodes[node_id]
+        node['data']['insolvent'] = node_data.get('insolvent', False)
+        node['data']['country'] = node_data.get('country', 'CZ')
+
+    return jsonify({
+        "found": True,
+        "path": path,
+        "path_length": len(path) - 1,
+        "details": path_details,
+        "subgraph": subgraph,
+        "waypoints": waypoints
+    })
+
 @app.route('/api/graph-stats', methods=['GET'])
 def get_graph_stats():
     """Get graph statistics"""
     stats = graph_builder.get_graph_stats()
     return jsonify(stats)
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    """Get simplified stats for the frontend hero section"""
+    stats = graph_builder.get_graph_stats()
+    return jsonify({
+        'entities': stats.get('total_nodes', 0),
+        'relationships': stats.get('total_edges', 0)
+    })
+
+@app.route('/api/explore/<entity_id>', methods=['GET'])
+def explore_entity(entity_id):
+    """Get entity and its immediate neighbors for exploration mode"""
+    try:
+        # Check if entity exists
+        if entity_id not in graph_builder.graph.nodes:
+            return jsonify({"error": f"Entity {entity_id} not found"}), 404
+
+        # Get existing visible nodes from query parameter (if provided)
+        existing_nodes_param = request.args.get('existing_nodes', '')
+        existing_nodes = set(existing_nodes_param.split(',')) if existing_nodes_param else set()
+
+        # Get the entity and its neighbors
+        node_data = graph_builder.graph.nodes[entity_id]
+        neighbors = list(graph_builder.graph.neighbors(entity_id))
+
+        # Build nodes list
+        nodes = []
+        edges = []
+
+        # Add the main entity
+        nodes.append({
+            'data': {
+                'id': entity_id,
+                'label': node_data.get('name', entity_id),
+                'type': node_data.get('type', 'unknown'),
+                'in_path': False,
+                'insolvent': node_data.get('insolvent', False),
+                'country': node_data.get('country', 'CZ'),
+                'city': node_data.get('city', '')
+            }
+        })
+
+        # Add neighbors
+        for neighbor_id in neighbors:
+            neighbor_data = graph_builder.graph.nodes[neighbor_id]
+            nodes.append({
+                'data': {
+                    'id': neighbor_id,
+                    'label': neighbor_data.get('name', neighbor_id),
+                    'type': neighbor_data.get('type', 'unknown'),
+                    'in_path': False,
+                    'insolvent': neighbor_data.get('insolvent', False),
+                    'country': neighbor_data.get('country', 'CZ'),
+                    'city': neighbor_data.get('city', '')
+                }
+            })
+
+            # Add edge from entity to neighbor
+            edge_data = graph_builder.graph.edges[entity_id, neighbor_id]
+            edges.append({
+                'data': {
+                    'source': entity_id,
+                    'target': neighbor_id,
+                    'type': edge_data.get('type', 'unknown'),
+                    'active': edge_data.get('active', True),
+                    'in_path': False
+                }
+            })
+
+        # Add edges between neighbors and existing visible nodes
+        if existing_nodes:
+            for neighbor_id in neighbors:
+                for existing_node_id in existing_nodes:
+                    # Check if there's an edge between neighbor and existing node
+                    if existing_node_id in graph_builder.graph and graph_builder.graph.has_edge(neighbor_id, existing_node_id):
+                        edge_data = graph_builder.graph.edges[neighbor_id, existing_node_id]
+                        edges.append({
+                            'data': {
+                                'source': neighbor_id,
+                                'target': existing_node_id,
+                                'type': edge_data.get('type', 'unknown'),
+                                'active': edge_data.get('active', True),
+                                'in_path': False
+                            }
+                        })
+                    # Check reverse direction
+                    elif existing_node_id in graph_builder.graph and graph_builder.graph.has_edge(existing_node_id, neighbor_id):
+                        edge_data = graph_builder.graph.edges[existing_node_id, neighbor_id]
+                        edges.append({
+                            'data': {
+                                'source': existing_node_id,
+                                'target': neighbor_id,
+                                'type': edge_data.get('type', 'unknown'),
+                                'active': edge_data.get('active', True),
+                                'in_path': False
+                            }
+                        })
+
+        return jsonify({
+            "entity": {
+                "id": entity_id,
+                "name": node_data.get('name', entity_id),
+                "type": node_data.get('type', 'unknown')
+            },
+            "subgraph": {
+                "nodes": nodes,
+                "edges": edges
+            },
+            "neighbor_count": len(neighbors)
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/entities/<entity_id>', methods=['GET'])
 def get_entity_details(entity_id):
@@ -319,6 +532,19 @@ def debug_reload():
     stats = graph_builder.get_graph_stats()
     return jsonify({
         "reloaded": True,
+        "stats": stats
+    })
+
+@app.route('/api/debug/enable-real-data', methods=['POST'])
+def enable_real_data():
+    """Debug endpoint to enable real data loading"""
+    import os
+    os.environ['USE_REAL_DATA'] = 'true'
+    graph_builder.graph.clear()
+    load_sample_data()
+    stats = graph_builder.get_graph_stats()
+    return jsonify({
+        "message": "Real data loading enabled and graph reloaded",
         "stats": stats
     })
 
