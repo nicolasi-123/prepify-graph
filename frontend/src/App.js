@@ -3,6 +3,7 @@ import SearchBar from './components/SearchBar';
 import GraphVisualization from './components/GraphVisualization';
 import PathResults from './components/PathResults';
 import ExportControls from './components/ExportControls';
+import EntityModal from './components/EntityModal';
 import axios from 'axios';
 import config from './config';
 import './App.css';
@@ -53,6 +54,8 @@ function App() {
   const [graphData, setGraphData] = useState(null);
   const [stats, setStats] = useState({ entities: 0, relationships: 0 });
   const [statsLoading, setStatsLoading] = useState(true);
+  const [modalEntity, setModalEntity] = useState(null);
+  const [prefillEntity, setPrefillEntity] = useState(null);
   const cyRef = useRef(null);
   const { toasts, addToast } = useToast();
 
@@ -66,7 +69,6 @@ function App() {
           relationships: response.data.relationships || 0
         });
       } catch {
-        // Fallback: try search to estimate
         try {
           const resp = await axios.get(`${config.API_BASE_URL}/api/search`, { params: { q: 'a' } });
           setStats({ entities: resp.data.total || 107, relationships: 205 });
@@ -140,6 +142,22 @@ function App() {
     cyRef.current = cy;
   };
 
+  const handleNodeClick = useCallback((nodeData, neighborData) => {
+    setModalEntity({ entity: nodeData, neighbors: neighborData });
+  }, []);
+
+  const handleModalClose = () => {
+    setModalEntity(null);
+  };
+
+  const handleFindPathsFrom = (entity) => {
+    setModalEntity(null);
+    setPrefillEntity({ id: entity.id, name: entity.label || entity.id, type: entity.type });
+  };
+
+  // Extract subgraph nodes for risk scoring
+  const subgraphNodes = pathData?.subgraph?.nodes || graphData?.nodes || [];
+
   return (
     <div className="App">
       {/* Toast notifications */}
@@ -151,6 +169,16 @@ function App() {
           </div>
         ))}
       </div>
+
+      {/* Entity Detail Modal */}
+      {modalEntity && (
+        <EntityModal
+          entity={modalEntity.entity}
+          neighbors={modalEntity.neighbors}
+          onClose={handleModalClose}
+          onFindPaths={handleFindPathsFrom}
+        />
+      )}
 
       {/* Hero Section */}
       <header className="hero">
@@ -189,13 +217,14 @@ function App() {
         </div>
       </header>
 
-      <SearchBar onPathFound={handlePathFound} cyRef={cyRef} />
+      <SearchBar onPathFound={handlePathFound} cyRef={cyRef} prefillEntity={prefillEntity} />
 
       <div className="main-content">
         <div className="graph-section">
           <GraphVisualization
             graphData={graphData}
             onCyReady={handleCyReady}
+            onNodeClick={handleNodeClick}
           />
 
           {pathData && (
@@ -207,12 +236,12 @@ function App() {
         </div>
 
         <div className="results-section">
-          <PathResults pathData={pathData} />
+          <PathResults pathData={pathData} subgraphNodes={subgraphNodes} />
         </div>
       </div>
 
       <footer className="footer">
-        <p>Prepify Graph v1.0 | Data from OR justice.cz | &copy; 2026</p>
+        <p>Prepify Graph v1.0 | Data from OR justice.cz | <a href="/help.html" className="footer-link">User Guide</a> | &copy; 2026</p>
       </footer>
     </div>
   );

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prepify Graph - User Guide</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      line-height: 1.7;
+      color: #2d3748;
+      background: #f7fafc;
+    }
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
+    }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9em;
+      margin-bottom: 24px;
+    }
+    .back-link:hover { text-decoration: underline; }
+    h1 {
+      font-size: 2em;
+      font-weight: 800;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+    .subtitle { color: #718096; margin-bottom: 40px; font-size: 1.05em; }
+    h2 {
+      font-size: 1.35em;
+      font-weight: 700;
+      color: #2d3748;
+      margin: 36px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #edf2f7;
+    }
+    h3 {
+      font-size: 1.05em;
+      font-weight: 600;
+      color: #4a5568;
+      margin: 20px 0 8px;
+    }
+    p { margin-bottom: 12px; }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .card h3 { margin-top: 0; }
+    .step-list {
+      list-style: none;
+      counter-reset: step;
+      padding: 0;
+    }
+    .step-list li {
+      counter-increment: step;
+      padding: 10px 0 10px 44px;
+      position: relative;
+      border-bottom: 1px solid #edf2f7;
+    }
+    .step-list li:last-child { border-bottom: none; }
+    .step-list li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 10px;
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8em;
+      font-weight: 700;
+    }
+    .legend-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: #f7fafc;
+      border-radius: 10px;
+    }
+    .legend-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+    .dot-company { background: #3498db; border-radius: 4px; }
+    .dot-person { background: #3498db; border-radius: 50%; }
+    .dot-insolvent { background: #c0392b; }
+    .dot-foreign { background: #9b59b6; }
+    .dot-path { background: #e74c3c; width: 24px; height: 4px; border-radius: 2px; }
+    .dot-inactive { background: #cbd5e0; width: 24px; height: 4px; border-radius: 2px; border-top: 2px dashed #a0aec0; }
+    .kbd {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #edf2f7;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.85em;
+      color: #4a5568;
+    }
+    .tip {
+      background: #ebf8ff;
+      border-left: 4px solid #4299e1;
+      padding: 12px 16px;
+      border-radius: 0 10px 10px 0;
+      margin: 12px 0;
+      font-size: 0.95em;
+    }
+    .warning {
+      background: #fffbeb;
+      border-left: 4px solid #f6ad55;
+      padding: 12px 16px;
+      border-radius: 0 10px 10px 0;
+      margin: 12px 0;
+      font-size: 0.95em;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 0.92em;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 1px solid #edf2f7;
+    }
+    th { font-weight: 600; color: #4a5568; background: #f7fafc; }
+    @media (max-width: 600px) {
+      .legend-grid { grid-template-columns: 1fr; }
+      .container { padding: 24px 16px 40px; }
+      h1 { font-size: 1.5em; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">&larr; Back to Prepify Graph</a>
+    <h1>User Guide</h1>
+    <p class="subtitle">Learn how to search, explore, and analyze Czech business relationships.</p>
+
+    <!-- SEARCHING -->
+    <h2>How to Search</h2>
+
+    <div class="card">
+      <h3>Path Search (default)</h3>
+      <p>Find the shortest connection between two entities (companies or people).</p>
+      <ol class="step-list">
+        <li>Type a company name, person name, or ICO in the <strong>Start</strong> field. Select from the dropdown.</li>
+        <li>Type and select in the <strong>End</strong> field.</li>
+        <li>Click <strong>Find Path</strong>. The graph and path details will appear below.</li>
+      </ol>
+      <div class="tip">You can request up to <strong>5 alternative paths</strong> using the "Number of paths" filter.</div>
+    </div>
+
+    <div class="card">
+      <h3>Multi-Point Routing</h3>
+      <p>Force a path through specific intermediate entities.</p>
+      <ol class="step-list">
+        <li>Enable <strong>"Multi-point routing"</strong> checkbox.</li>
+        <li>Click <strong>"+ Add waypoint"</strong> to add intermediate stops (up to 5 total).</li>
+        <li>Select entities for each waypoint, then click <strong>Find Multi-Point Path</strong>.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>Exploration Mode</h3>
+      <p>Browse the graph interactively starting from a single entity.</p>
+      <ol class="step-list">
+        <li>Enable <strong>"Exploration Mode"</strong> checkbox.</li>
+        <li>Search and select one entity, then click <strong>Explore Entity</strong>.</li>
+        <li><strong>Right-click</strong> any node in the graph to expand its connections.</li>
+        <li>Use the "Find Path to Node" section to search for a target from visible nodes.</li>
+      </ol>
+    </div>
+
+    <!-- UNDERSTANDING PATHS -->
+    <h2>Understanding Path Results</h2>
+
+    <div class="card">
+      <h3>Path Cards</h3>
+      <p>Each path shows a chain of entities connected by relationships. The <strong>path length</strong> is the number of relationship steps (edges), not entities.</p>
+      <table>
+        <tr><th>Term</th><th>Meaning</th></tr>
+        <tr><td>Path Length</td><td>Number of relationship steps (e.g., A &rarr; B &rarr; C = 2 steps)</td></tr>
+        <tr><td>Risk Score</td><td>Count of insolvent + foreign entities in the path</td></tr>
+        <tr><td>jednatel</td><td>Executive / managing director</td></tr>
+        <tr><td>spolecnik</td><td>Shareholder / partner</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Risk Badges</h3>
+      <table>
+        <tr><th>Badge</th><th>Score</th><th>Meaning</th></tr>
+        <tr><td style="color:#22543d;font-weight:700;">LOW</td><td>0</td><td>No insolvent or foreign entities</td></tr>
+        <tr><td style="color:#744210;font-weight:700;">MEDIUM</td><td>1-2</td><td>Some risk factors present</td></tr>
+        <tr><td style="color:#742a2a;font-weight:700;">HIGH</td><td>3+</td><td>Multiple insolvent or offshore entities</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Compare Paths</h3>
+      <p>When multiple paths are found, click <strong>"Compare Paths"</strong> to see them side-by-side. Entities unique to one path are highlighted with a purple accent.</p>
+    </div>
+
+    <!-- FILTERS -->
+    <h2>Filters Explained</h2>
+
+    <div class="card">
+      <table>
+        <tr><th>Filter</th><th>What it does</th></tr>
+        <tr><td><strong>Max path length</strong></td><td>Limits the maximum number of steps. Shorter = more direct connections.</td></tr>
+        <tr><td><strong>Number of paths</strong></td><td>How many alternative routes to return (1, 3, or 5).</td></tr>
+        <tr><td><strong>Exclude insolvent</strong></td><td>Removes paths passing through companies with active insolvency proceedings (ISIR).</td></tr>
+        <tr><td><strong>Exclude foreign</strong></td><td>Removes paths passing through non-Czech entities (Cyprus, Netherlands, etc.).</td></tr>
+        <tr><td><strong>Active only</strong></td><td>Only shows paths using currently active relationships (ignores historical/deleted ones).</td></tr>
+      </table>
+    </div>
+
+    <!-- GRAPH INTERACTIONS -->
+    <h2>Graph Interactions</h2>
+
+    <div class="card">
+      <table>
+        <tr><th>Action</th><th>Effect</th></tr>
+        <tr><td><strong>Click</strong> a node</td><td>Opens the entity detail modal with full info and connections</td></tr>
+        <tr><td><strong>Right-click</strong> a node</td><td>Expands/collapses its connections (dims other nodes)</td></tr>
+        <tr><td><strong>Scroll wheel</strong></td><td>Zoom in/out</td></tr>
+        <tr><td><strong>Click + drag</strong> background</td><td>Pan the view</td></tr>
+        <tr><td><strong>Click + drag</strong> a node</td><td>Move the node</td></tr>
+        <tr><td><strong>Hover</strong> over a node</td><td>Shows tooltip with entity details</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Controls Panel (top-right)</h3>
+      <table>
+        <tr><th>Button</th><th>Action</th></tr>
+        <tr><td><span class="kbd">+</span> / <span class="kbd">&minus;</span></td><td>Zoom in / out</td></tr>
+        <tr><td><span class="kbd">&#9634;</span></td><td>Fit graph to screen</td></tr>
+        <tr><td><span class="kbd">&#8634;</span></td><td>Reset view (clear all highlights)</td></tr>
+        <tr><td><span class="kbd">&#128247;</span></td><td>Export graph as PNG</td></tr>
+        <tr><td><span class="kbd">&#26F6;</span></td><td>Toggle fullscreen</td></tr>
+        <tr><td><strong>Nodes</strong> slider</td><td>Adjust node size</td></tr>
+        <tr><td><strong>Edges</strong> slider</td><td>Adjust edge thickness</td></tr>
+      </table>
+    </div>
+
+    <!-- GRAPH COLORS -->
+    <h2>Color Legend</h2>
+
+    <div class="card">
+      <div class="legend-grid">
+        <div class="legend-item">
+          <div class="legend-dot dot-company"></div>
+          <span><strong>Company</strong> - square shape</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot dot-person"></div>
+          <span><strong>Person</strong> - circle shape</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot dot-insolvent"></div>
+          <span><strong>Insolvent</strong> - red with double border</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot dot-foreign"></div>
+          <span><strong>Foreign</strong> - purple</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot dot-path"></div>
+          <span><strong>Path edge</strong> - highlighted route</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot dot-inactive"></div>
+          <span><strong>Historical</strong> - dashed, faded</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ENTITY MODAL -->
+    <h2>Entity Detail Modal</h2>
+
+    <div class="card">
+      <p>Click any node to open the detail modal showing:</p>
+      <ul style="padding-left: 20px; margin-top: 8px;">
+        <li><strong>Full name</strong> and entity type</li>
+        <li><strong>ID</strong> (ICO for companies, generated ID for persons)</li>
+        <li><strong>City</strong> and <strong>country</strong></li>
+        <li><strong>Insolvency status</strong> (if applicable)</li>
+        <li><strong>Mini network graph</strong> showing direct connections</li>
+        <li><strong>Connections list</strong> grouped by relationship type</li>
+      </ul>
+      <div class="tip">Click <strong>"Find Paths From Here"</strong> to auto-fill the search bar with this entity as the starting point.</div>
+    </div>
+
+    <!-- EXPORT -->
+    <h2>Exporting Data</h2>
+
+    <div class="card">
+      <p>After finding a path, export controls appear below the graph:</p>
+      <table>
+        <tr><th>Format</th><th>Use case</th></tr>
+        <tr><td><strong>PDF</strong></td><td>Print-ready graph image with metadata</td></tr>
+        <tr><td><strong>SVG</strong></td><td>Scalable vector format for editing in design tools</td></tr>
+        <tr><td><strong>PNG</strong></td><td>High-resolution image (3x scale)</td></tr>
+        <tr><td><strong>JSON</strong></td><td>Raw path data for programmatic use</td></tr>
+      </table>
+    </div>
+
+    <div class="warning">
+      <strong>Data source:</strong> All company data comes from the Czech Business Registry (OR justice.cz). Insolvency data is cross-referenced with ISIR. Data may not reflect the very latest registry updates.
+    </div>
+  </div>
+</body>
+</html>

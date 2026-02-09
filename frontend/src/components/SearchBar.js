@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import config from '../config';
+import HelpTip from './HelpTip';
 
-function SearchBar({ onPathFound, cyRef }) {
+function SearchBar({ onPathFound, cyRef, prefillEntity }) {
   const [waypoints, setWaypoints] = useState([
     { id: 0, query: '', results: [], selected: null, showResults: false },
     { id: 1, query: '', results: [], selected: null, showResults: false }
@@ -21,6 +22,19 @@ function SearchBar({ onPathFound, cyRef }) {
   const [selectedTarget, setSelectedTarget] = useState(null);
   const [showTargetResults, setShowTargetResults] = useState(false);
   const [pathLoading, setPathLoading] = useState(false);
+
+  // Handle prefill from entity modal "Find Paths From Here"
+  useEffect(() => {
+    if (prefillEntity) {
+      updateWaypoint(0, {
+        selected: prefillEntity,
+        query: `${prefillEntity.name} (${prefillEntity.id})`,
+        showResults: false
+      });
+      setExplorationMode(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillEntity]);
 
   const searchEntities = async (query, waypointId) => {
     if (query.length < 2) {
@@ -151,7 +165,7 @@ const exploreEntity = async () => {
     const visibleNodes = cy.nodes().filter(n => !n.data('dimmed')).map(n => n.id());
 
     if (visibleNodes.length === 0) {
-      alert('⚠️ No visible nodes found.\n\n💡 Double-click nodes in the graph to expand and show connections first.');
+      alert('No visible nodes found.\n\nRight-click nodes in the graph to expand and show connections first.');
       return;
     }
 
@@ -397,7 +411,7 @@ const findPath = async () => {
           {!useMultiPoint && (
             <>
               <div className="filter-group">
-                <label>Max path length:</label>
+                <label>Max path length: <HelpTip text="Maximum number of relationship steps. Shorter paths = more direct connections." /></label>
                 <select value={maxPathLength} onChange={(e) => setMaxPathLength(Number(e.target.value))}>
                   <option value={3}>3 steps</option>
                   <option value={4}>4 steps</option>
@@ -408,7 +422,7 @@ const findPath = async () => {
               </div>
 
               <div className="filter-group">
-                <label>Number of paths:</label>
+                <label>Number of paths: <HelpTip text="How many alternative routes to find. More paths = better comparison of options." /></label>
                 <select value={topK} onChange={(e) => setTopK(Number(e.target.value))}>
                   <option value={1}>1 path</option>
                   <option value={3}>Top 3 paths</option>
@@ -425,7 +439,7 @@ const findPath = async () => {
               checked={excludeInsolvent}
               onChange={(e) => setExcludeInsolvent(e.target.checked)}
             />
-            <span>Exclude insolvent entities ⚠️</span>
+            <span>Exclude insolvent entities <HelpTip text="Remove paths passing through companies with active insolvency proceedings from ISIR." /></span>
           </label>
         </div>
 
@@ -436,7 +450,7 @@ const findPath = async () => {
               checked={excludeForeign}
               onChange={(e) => setExcludeForeign(e.target.checked)}
             />
-            <span>Exclude foreign entities 🌍</span>
+            <span>Exclude foreign entities <HelpTip text="Remove paths through non-Czech entities (e.g. Cyprus, Netherlands shell companies)." /></span>
           </label>
         </div>
 
@@ -447,7 +461,7 @@ const findPath = async () => {
                 checked={excludeInactive}
                 onChange={(e) => setExcludeInactive(e.target.checked)}
               />
-              <span>Show only active relationships ⏱️</span>
+              <span>Show only active relationships <HelpTip text="Ignore historical/deleted relationships. Only use currently active connections." /></span>
             </label>
           </div>
         </div>

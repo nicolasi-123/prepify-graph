@@ -1,8 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import cytoscape from 'cytoscape';
 import cola from 'cytoscape-cola';
 import axios from 'axios';
 import config from '../config';
+import { saveAs } from 'file-saver';
+import HelpTip from './HelpTip';
 
 cytoscape.use(cola);
 
@@ -11,12 +13,53 @@ function truncateLabel(label, max = 18) {
   return label.substring(0, max - 1) + '\u2026';
 }
 
-function GraphVisualization({ graphData, onCyReady }) {
+function GraphVisualization({ graphData, onCyReady, onNodeClick }) {
   const containerRef = useRef(null);
+  const graphSectionRef = useRef(null);
   const cyRef = useRef(null);
+  const onNodeClickRef = useRef(onNodeClick);
+  const onCyReadyRef = useRef(onCyReady);
+  const nodeSizeRef = useRef(40);
+  const edgeWidthRef = useRef(1.5);
   const [selectedNode, setSelectedNode] = useState(null);
   const [expandedNode, setExpandedNode] = useState(null);
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: '' });
+  const [controlsOpen, setControlsOpen] = useState(true);
+  const [nodeSize, setNodeSize] = useState(40);
+  const [edgeWidth, setEdgeWidth] = useState(1.5);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Keep refs in sync
+  onNodeClickRef.current = onNodeClick;
+  onCyReadyRef.current = onCyReady;
+  nodeSizeRef.current = nodeSize;
+  edgeWidthRef.current = edgeWidth;
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
+
+  // Apply node size changes
+  useEffect(() => {
+    if (!cyRef.current) return;
+    cyRef.current.nodes().forEach(n => {
+      const isPath = n.data('in_path');
+      n.style('width', isPath ? nodeSize * 1.4 : nodeSize);
+      n.style('height', isPath ? nodeSize * 1.4 : nodeSize);
+    });
+  }, [nodeSize]);
+
+  // Apply edge width changes
+  useEffect(() => {
+    if (!cyRef.current) return;
+    cyRef.current.edges().forEach(e => {
+      const isPath = e.data('in_path');
+      e.style('width', isPath ? edgeWidth * 2.5 : edgeWidth);
+    });
+  }, [edgeWidth]);
 
   useEffect(() => {
     if (!graphData || !containerRef.current) return;
@@ -45,10 +88,10 @@ function GraphVisualization({ graphData, onCyReady }) {
               return truncateLabel(ele.data('label'));
             },
             'width': function(ele) {
-              return ele.data('in_path') ? 56 : 40;
+              return ele.data('in_path') ? nodeSizeRef.current * 1.4 : nodeSizeRef.current;
             },
             'height': function(ele) {
-              return ele.data('in_path') ? 56 : 40;
+              return ele.data('in_path') ? nodeSizeRef.current * 1.4 : nodeSizeRef.current;
             },
             'text-valign': 'bottom',
             'text-halign': 'center',
@@ -111,7 +154,7 @@ function GraphVisualization({ graphData, onCyReady }) {
           selector: 'edge',
           style: {
             'width': function(ele) {
-              return ele.data('in_path') ? 4 : 1.5;
+              return ele.data('in_path') ? edgeWidthRef.current * 2.5 : edgeWidthRef.current;
             },
             'line-color': function(ele) {
               return ele.data('in_path') ? '#e74c3c' : '#cbd5e0';
@@ -158,6 +201,24 @@ function GraphVisualization({ graphData, onCyReady }) {
       wheelSensitivity: 0.2
     });
 
+    // Single-click handler → open entity modal
+    cy.on('tap', 'node', function(evt) {
+      const node = evt.target;
+      const nodeData = node.data();
+      const neighbors = node.neighborhood();
+      const neighborData = neighbors.nodes().map(n => {
+        const edge = n.edgesWith(node);
+        return {
+          ...n.data(),
+          edgeType: edge.length > 0 ? edge[0].data('type') : 'unknown',
+          edgeActive: edge.length > 0 ? edge[0].data('active') : true
+        };
+      });
+      if (onNodeClickRef.current) {
+        onNodeClickRef.current({ ...nodeData, id: node.id() }, neighborData);
+      }
+    });
+
     // Tooltip handlers
     cy.on('mouseover', 'node', function(evt) {
       const node = evt.target;
@@ -198,8 +259,14 @@ function GraphVisualization({ graphData, onCyReady }) {
       setTooltip({ visible: false, x: 0, y: 0, content: '' });
     });
 
-    // Double-tap handler for expansion mode with dynamic loading
-    cy.on('dbltap', 'node', async function(evt) {
+    // Prevent browser context menu on graph so right-click works for expand
+    cy.on('cxttapstart', function(evt) {
+      evt.originalEvent.preventDefault();
+    });
+
+    // Right-click handler for expansion mode with dynamic loading
+    cy.on('cxttap', 'node', async function(evt) {
+      evt.originalEvent.preventDefault();
       const node = evt.target;
       const nodeId = node.id();
 
@@ -222,7 +289,6 @@ function GraphVisualization({ graphData, onCyReady }) {
 
           if (nodesToAdd.length > 0 || newEdges.length > 0) {
             cy.nodes().lock();
-
             cy.add(nodesToAdd);
             cy.add(newEdges);
 
@@ -270,12 +336,8 @@ function GraphVisualization({ graphData, onCyReady }) {
             expNode.neighborhood().edges().forEach(e => visibleEdges.add(e.id()));
           });
 
-          cy.nodes().forEach(n => {
-            n.data('dimmed', !visibleNodes.has(n.id()));
-          });
-          cy.edges().forEach(e => {
-            e.data('dimmed', !visibleEdges.has(e.id()));
-          });
+          cy.nodes().forEach(n => n.data('dimmed', !visibleNodes.has(n.id())));
+          cy.edges().forEach(e => e.data('dimmed', !visibleEdges.has(e.id())));
 
           const firstExpanded = expandedNodes[0];
           setExpandedNode(firstExpanded.id());
@@ -301,13 +363,8 @@ function GraphVisualization({ graphData, onCyReady }) {
         node.data('expanded', true);
         node.data('dimmed', false);
 
-        neighborNodes.forEach(n => {
-          n.data('dimmed', false);
-        });
-
-        neighborEdges.forEach(e => {
-          e.data('dimmed', false);
-        });
+        neighborNodes.forEach(n => n.data('dimmed', false));
+        neighborEdges.forEach(e => e.data('dimmed', false));
 
         setExpandedNode(nodeId);
         setSelectedNode({
@@ -319,15 +376,14 @@ function GraphVisualization({ graphData, onCyReady }) {
       }
     });
 
-    // Store reference
     cyRef.current = cy;
 
     if (typeof window !== 'undefined') {
       window.cy = cy;
     }
 
-    if (onCyReady) {
-      onCyReady(cy);
+    if (onCyReadyRef.current) {
+      onCyReadyRef.current(cy);
     }
 
     return () => {
@@ -341,9 +397,10 @@ function GraphVisualization({ graphData, onCyReady }) {
         }
       }
     };
-  }, [graphData, onCyReady]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphData]);
 
-  const animateZoom = (targetZoom) => {
+  const animateZoom = useCallback((targetZoom) => {
     if (!cyRef.current) return;
     cyRef.current.animate({
       zoom: {
@@ -351,23 +408,25 @@ function GraphVisualization({ graphData, onCyReady }) {
         renderedPosition: { x: cyRef.current.width() / 2, y: cyRef.current.height() / 2 }
       }
     }, { duration: 250, easing: 'ease-in-out-sine' });
-  };
+  }, []);
 
   const handleZoomIn = () => {
-    if (cyRef.current) {
-      animateZoom(cyRef.current.zoom() * 1.3);
-    }
+    if (cyRef.current) animateZoom(cyRef.current.zoom() * 1.3);
   };
 
   const handleZoomOut = () => {
+    if (cyRef.current) animateZoom(cyRef.current.zoom() * 0.7);
+  };
+
+  const handleFitScreen = () => {
     if (cyRef.current) {
-      animateZoom(cyRef.current.zoom() * 0.7);
+      cyRef.current.animate({ fit: { padding: 50 } }, { duration: 400, easing: 'ease-in-out-sine' });
     }
   };
 
   const handleResetView = () => {
     if (cyRef.current) {
-      cyRef.current.animate({ fit: { padding: 50 } }, { duration: 400, easing: 'ease-in-out-sine' });
+      handleFitScreen();
       cyRef.current.nodes().forEach(n => {
         n.data('expanded', false);
         n.data('dimmed', false);
@@ -393,6 +452,28 @@ function GraphVisualization({ graphData, onCyReady }) {
       });
       setSelectedNode(null);
       setExpandedNode(null);
+    }
+  };
+
+  const handleExportPNG = async () => {
+    if (!cyRef.current) return;
+    try {
+      const png = cyRef.current.png({ scale: 3, full: true, bg: '#ffffff' });
+      const response = await fetch(png);
+      const blob = await response.blob();
+      saveAs(blob, 'prepify-graph.png');
+    } catch (error) {
+      console.error('PNG export error:', error);
+    }
+  };
+
+  const handleFullscreen = () => {
+    const section = graphSectionRef.current || containerRef.current?.parentElement;
+    if (!section) return;
+    if (!document.fullscreenElement) {
+      section.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
     }
   };
 
@@ -429,22 +510,71 @@ function GraphVisualization({ graphData, onCyReady }) {
   }
 
   return (
-    <div className="graph-container">
+    <div className="graph-container" ref={graphSectionRef}>
       <div
         ref={containerRef}
         className="graph-canvas"
-        style={{ width: '100%', height: '600px', position: 'relative' }}
+        onContextMenu={(e) => e.preventDefault()}
+        style={{ width: '100%', height: isFullscreen ? '100vh' : '600px', position: 'relative' }}
       />
 
-      {/* Zoom Controls */}
-      <div className="zoom-controls">
-        <button onClick={handleZoomIn} title="Zoom In">+</button>
-        <button onClick={handleZoomOut} title="Zoom Out">&minus;</button>
-        <button onClick={handleResetView} title="Reset View">&#8634;</button>
-        {expandedNode && (
-          <button onClick={handleResetExpansion} title="Reset Expansion" className="reset-expansion">
-            &#8617;
-          </button>
+      {/* Controls Panel */}
+      <div className={`graph-controls-panel ${controlsOpen ? 'open' : 'collapsed'}`}>
+        <button
+          className="controls-toggle"
+          onClick={() => setControlsOpen(!controlsOpen)}
+          title={controlsOpen ? 'Collapse controls' : 'Expand controls'}
+        >
+          {controlsOpen ? '\u2715' : '\u2699'}
+        </button>
+
+        {controlsOpen && (
+          <div className="controls-body">
+            <div className="controls-buttons">
+              <button onClick={handleZoomIn} title="Zoom In">+</button>
+              <button onClick={handleZoomOut} title="Zoom Out">&minus;</button>
+              <button onClick={handleFitScreen} title="Fit to Screen">&#9634;</button>
+              <button onClick={handleResetView} title="Reset View">&#8634;</button>
+              <button onClick={handleExportPNG} title="Export PNG">&#128247;</button>
+              <button onClick={handleFullscreen} title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}>
+                {isFullscreen ? '\u2716' : '\u26F6'}
+              </button>
+              {expandedNode && (
+                <button onClick={handleResetExpansion} title="Reset Expansion" className="reset-expansion">
+                  &#8617;
+                </button>
+              )}
+            </div>
+
+            <div className="controls-sliders">
+              <div className="control-row">
+                <label>Nodes</label>
+                <input
+                  type="range"
+                  min="20"
+                  max="80"
+                  step="5"
+                  value={nodeSize}
+                  onChange={(e) => setNodeSize(Number(e.target.value))}
+                  className="control-slider"
+                />
+                <span className="control-value">{nodeSize}</span>
+              </div>
+              <div className="control-row">
+                <label>Edges</label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="5"
+                  step="0.5"
+                  value={edgeWidth}
+                  onChange={(e) => setEdgeWidth(Number(e.target.value))}
+                  className="control-slider"
+                />
+                <span className="control-value">{edgeWidth}</span>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -470,7 +600,7 @@ function GraphVisualization({ graphData, onCyReady }) {
             <span className="connection-count"> &middot; {selectedNode.connections} connections</span>
           )}
           {expandedNode && (
-            <span className="expand-hint"> &middot; Double-click again to collapse</span>
+            <span className="expand-hint"> &middot; Right-click again to collapse</span>
           )}
         </div>
       )}
@@ -478,7 +608,7 @@ function GraphVisualization({ graphData, onCyReady }) {
       {/* Exploration Hint */}
       {graphData && !expandedNode && (
         <div className="exploration-hint">
-          Tip: Double-click any node to explore its connections
+          Tip: Right-click any node to expand its connections
         </div>
       )}
 
@@ -494,11 +624,11 @@ function GraphVisualization({ graphData, onCyReady }) {
         </div>
         <div className="legend-item">
           <div className="legend-node insolvent"></div>
-          <span>Insolvent</span>
+          <span>Insolvent <HelpTip text="Company has active insolvency proceedings in the ISIR registry." /></span>
         </div>
         <div className="legend-item">
           <div className="legend-node foreign"></div>
-          <span>Foreign</span>
+          <span>Foreign <HelpTip text="Entity registered outside Czech Republic (e.g. Cyprus, Netherlands)." /></span>
         </div>
         <div className="legend-item">
           <div className="legend-edge path"></div>
@@ -506,7 +636,7 @@ function GraphVisualization({ graphData, onCyReady }) {
         </div>
         <div className="legend-item">
           <div className="legend-edge inactive"></div>
-          <span>Historical</span>
+          <span>Historical <HelpTip text="Relationship that has been deleted/ended in the registry (vymazDatum present)." /></span>
         </div>
       </div>
     </div>

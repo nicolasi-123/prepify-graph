@@ -5,9 +5,31 @@ from graph_builder import GraphBuilder
 from data_fetcher import CzechRegistryFetcher, ISIRFetcher, InternationalRegistryFetcher
 from or_parser import or_parser
 import json
+import logging
+import os
+import time
+from logging.handlers import TimedRotatingFileHandler
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
+
+# --- Error Logging ---
+_start_time = time.time()
+_logs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+os.makedirs(_logs_dir, exist_ok=True)
+
+_error_handler = TimedRotatingFileHandler(
+    os.path.join(_logs_dir, 'errors.log'),
+    when='midnight',
+    backupCount=30,
+    encoding='utf-8'
+)
+_error_handler.setLevel(logging.WARNING)
+_error_handler.setFormatter(logging.Formatter(
+    '%(asctime)s | %(levelname)s | %(message)s'
+))
+app.logger.addHandler(_error_handler)
+app.logger.setLevel(logging.INFO)
 
 # Initialize components
 graph_builder = GraphBuilder()
@@ -547,6 +569,26 @@ def enable_real_data():
         "message": "Real data loading enabled and graph reloaded",
         "stats": stats
     })
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for monitoring (e.g. Render)"""
+    stats = graph_builder.get_graph_stats()
+    uptime = time.time() - _start_time
+    return jsonify({
+        "status": "healthy",
+        "version": "1.0.0",
+        "entities": stats.get('total_nodes', 0),
+        "relationships": stats.get('total_edges', 0),
+        "uptime_seconds": round(uptime)
+    })
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Log unhandled exceptions"""
+    ip = request.remote_addr or 'unknown'
+    app.logger.error(f"{request.method} {request.path} | IP: {ip} | {type(e).__name__}: {e}")
+    return jsonify({"error": "Internal server error"}), 500
 
     # Load sample data on startup (only once)
 if graph_builder.graph.number_of_nodes() == 0:
